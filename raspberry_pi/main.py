@@ -22,6 +22,10 @@ def main() -> None:
     estop_latched = False
     last_left = 0
     last_right = 0
+    distance_active = False
+    distance_started_at = 0.0
+    distance_acknowledged = False
+    distance_ack_deadline = 0.0
 
     try:
         estop_gpio = EstopGPIO(config.ESTOP_GPIO_PIN)
@@ -41,26 +45,95 @@ def main() -> None:
         next_status = next_cycle
         while True:
             now = time.monotonic()
-            for safety_command in receiver.pop_safety_commands():
+            for response in sender.pop_responses():
+                if response == "DONE":
+                    distance_active = False
+                    distance_acknowledged = False
+                    print("Distance move completed.")
+                elif response == "ACK MOVE":
+                    distance_acknowledged = True
+                    print("Arduino accepted distance move.")
+                elif response in ("ERR COMMAND", "ERR ESTOP"):
+                    distance_active = False
+                    distance_acknowledged = False
+                    if response == "ERR ESTOP":
+                        estop_latched = True
+                    print(f"Arduino rejected command: {response}")
+                elif response.startswith("ERR STALL "):
+                    distance_active = False
+                    distance_acknowledged = False
+                    print(f"Distance move stopped: {response}")
+                elif response == "WATCHDOG":
+                    print("Arduino manual watchdog stopped the motors.")
+                elif response.startswith("ESTOP "):
+                    if not estop_latched:
+                        print("Arduino hardware E-STOP latch detected; press X to reset.")
+                    estop_latched = True
+
+            safety_commands = receiver.pop_safety_commands()
+            for safety_command in safety_commands:
                 if safety_command == "ESTOP":
                     estop_gpio.assert_estop()
                     estop_latched = True
                     input_filter.reset()
                     last_left, last_right = 0, 0
+                    distance_active = False
+                    distance_acknowledged = False
                     print("E-STOP latched: motion forwarding disabled.")
                 elif safety_command == "RESET":
                     estop_gpio.reset()
                     sender.send_raw(config.SERIAL_RESET_COMMAND)
                     estop_latched = False
                     input_filter.reset()
+                    distance_active = False
+                    distance_acknowledged = False
                     print("E-STOP reset: motion forwarding enabled.")
 
+            distance_moves = receiver.pop_distance_moves()
+            if distance_moves and not estop_latched and not safety_commands:
+                move = distance_moves[-1]
+                sender.send_raw(
+                    config.SERIAL_MOVE_COMMAND_FORMAT.format(
+                        direction=move.direction,
+                        speed_level=move.speed_level,
+                        distance_cm=move.distance_cm,
+                    )
+                )
+                distance_active = True
+                distance_started_at = move.received_at
+                distance_acknowledged = False
+                distance_ack_deadline = now + config.MOVE_ACK_TIMEOUT_SECONDS
+                input_filter.reset()
+                print(
+                    f"Distance move started: {move.direction} level="
+                    f"{move.speed_level} distance={move.distance_cm}cm"
+                )
+
             command = receiver.latest()
+            if (
+                distance_active
+                and command is not None
+                and command.received_at > distance_started_at
+            ):
+                distance_active = False
+                distance_acknowledged = False
+                print("Distance move cancelled by manual control.")
+            if (
+                distance_active
+                and not distance_acknowledged
+                and now >= distance_ack_deadline
+            ):
+                distance_active = False
+                sender.send(0, 0)
+                print("Distance move cancelled: Arduino ACK timeout.")
             stale = command is None or now - command.received_at > config.CONTROL_TIMEOUT_SECONDS
 
             if estop_latched:
                 last_left, last_right = 0, 0
                 timed_out = True
+            elif distance_active:
+                last_left, last_right = 0, 0
+                timed_out = False
             elif stale:
                 if not timed_out:
                     print("Control timeout: stopping motors.")
@@ -104,7 +177,7 @@ def main() -> None:
                     f"RX packets={stats.packets} valid={stats.valid_packets} "
                     f"invalid={stats.invalid_packets} source={source} "
                     f"({rx_detail}) | MIX L={last_left:+d} R={last_right:+d} "
-                    f"{'ESTOP' if estop_latched else ('TIMEOUT/STOP' if timed_out else 'ACTIVE')} | "
+                    f"{'ESTOP' if estop_latched else ('DISTANCE' if distance_active else ('TIMEOUT/STOP' if timed_out else 'ACTIVE'))} | "
                     f"TX commands={sender.commands_sent} bytes={sender.bytes_sent} "
                     f"last='{sender.last_command}' port={sender.port} | "
                     f"ARDUINO replies={sender.responses_received} "

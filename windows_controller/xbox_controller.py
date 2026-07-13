@@ -11,7 +11,6 @@ from config import LEFT_STICK_DEADZONE
 
 LEFT_STICK_HORIZONTAL_AXIS = 0
 LEFT_STICK_VERTICAL_AXIS = 1
-LEFT_STICK_BUTTON = 8
 X_BUTTON = 2
 Y_BUTTON = 3
 
@@ -22,15 +21,15 @@ class ControllerState:
 
     x: float
     y: float
-    left_stick_pressed: bool
     estop_pressed: bool
     reset_pressed: bool
+    dpad_x: int
+    dpad_y: int
 
-    def as_dict(self) -> dict[str, float | bool]:
+    def as_dict(self) -> dict[str, float]:
         return {
             "x": round(self.x, 3),
             "y": round(self.y, 3),
-            "left_stick_pressed": self.left_stick_pressed,
         }
 
 
@@ -65,7 +64,10 @@ class XboxController:
         if controller.get_numaxes() < 2:
             controller.quit()
             raise RuntimeError("The controller does not expose two stick axes.")
-        required_button = max(LEFT_STICK_BUTTON, X_BUTTON, Y_BUTTON)
+        if controller.get_numhats() < 1:
+            controller.quit()
+            raise RuntimeError("The controller does not expose a D-pad hat.")
+        required_button = max(X_BUTTON, Y_BUTTON)
         if controller.get_numbuttons() <= required_button:
             button_count = controller.get_numbuttons()
             controller.quit()
@@ -87,16 +89,16 @@ class XboxController:
         vertical = self._apply_deadzone(
             self._controller.get_axis(LEFT_STICK_VERTICAL_AXIS)
         )
+        dpad_x, dpad_y = self._controller.get_hat(0)
 
         # Robot coordinates: facing forward is +x; right is +y.
         return ControllerState(
             x=-vertical,
             y=horizontal,
-            left_stick_pressed=bool(
-                self._controller.get_button(LEFT_STICK_BUTTON)
-            ),
             estop_pressed=bool(self._controller.get_button(Y_BUTTON)),
             reset_pressed=bool(self._controller.get_button(X_BUTTON)),
+            dpad_x=dpad_x,
+            dpad_y=dpad_y,
         )
 
     def close(self) -> None:

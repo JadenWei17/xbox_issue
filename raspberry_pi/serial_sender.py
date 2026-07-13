@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections import deque
 
 import serial
 from serial.tools import list_ports
@@ -58,6 +59,7 @@ class SerialSender:
         self.responses_received = 0
         self.last_response = "none"
         self._response_buffer = bytearray()
+        self._responses: deque[str] = deque()
         self._serial = serial.Serial(
             port=self.port,
             baudrate=baudrate,
@@ -86,6 +88,12 @@ class SerialSender:
         self.last_command = command.rstrip()
         self.last_sent_at = time.monotonic()
 
+    def pop_responses(self) -> list[str]:
+        self._read_responses()
+        responses = list(self._responses)
+        self._responses.clear()
+        return responses
+
     def _read_responses(self) -> None:
         waiting = self._serial.in_waiting
         if waiting <= 0:
@@ -98,6 +106,7 @@ class SerialSender:
             if line:
                 self.responses_received += 1
                 self.last_response = line
+                self._responses.append(line)
 
     def stop(self) -> None:
         self.send(0, 0)

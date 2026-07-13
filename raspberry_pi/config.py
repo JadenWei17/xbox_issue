@@ -21,6 +21,9 @@ SERIAL_STARTUP_DELAY_SECONDS = 2.0
 CONTROL_RATE_HZ = 30.0
 CONTROL_TIMEOUT_SECONDS = 0.5
 STATUS_INTERVAL_SECONDS = 1.0
+MOVE_ACK_TIMEOUT_SECONDS = 1.0
+MAX_DISTANCE_CM = 1000
+VALID_SPEED_LEVELS = (1, 2, 3)
 
 # Input shaping. ALPHA is the share of the newest sample in an EMA.
 INPUT_DEADZONE = 0.03
@@ -36,3 +39,4 @@ TURN_SCALE = 0.5
 # Arduino line protocol: L:<signed integer>,R:<signed integer>\n
 SERIAL_COMMAND_FORMAT = "L:{left},R:{right}\n"
 SERIAL_RESET_COMMAND = "RESET\n"
+SERIAL_MOVE_COMMAND_FORMAT = "MOVE {direction} {speed_level} {distance_cm}\n"

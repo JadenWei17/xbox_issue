@@ -54,16 +54,27 @@ joystick values, mixed wheel speeds, timeout state, and serial write counts.
 One UTF-8 JSON object per datagram:
 
 ```json
-{"x":0.75,"y":-0.2,"left_stick_pressed":false}
+{"x":0.75,"y":-0.2}
 ```
 
 `x` is forward/back and `y` is right/left, both finite numbers in `[-1, 1]`.
-`left_stick_pressed` must be a boolean (currently validated and reserved for
-future use). Invalid packets are ignored. Only the newest valid packet is used.
+No additional fields are accepted. Invalid packets are ignored. Only the newest
+valid packet is used.
 
 Y and X button press edges send separate `{"command":"ESTOP"}` and
 `{"command":"RESET"}` datagrams. E-STOP disables motion forwarding until a
 RESET is received.
+
+Distance mode sends a structured command:
+
+```json
+{"command":"MOVE","direction":"FWD","speed_level":2,"distance_cm":10}
+```
+
+`direction` is `FWD` or `BWD`, `speed_level` is 1, 2, or 3, and
+`distance_cm` is an integer from 1 to 1000. While a distance move is active,
+the Pi does not send manual timeout commands that could cancel the Arduino
+task. A newer manual control packet, E-STOP, or RESET cancels the task.
 
 ## Arduino serial protocol
 
@@ -77,6 +88,17 @@ L:128,R:-64
 negative means reverse, and zero means stop. The Arduino sketch must parse a
 newline-terminated line in this format and refresh its own watchdog on receipt.
 The additional `RESET` line is used only to clear the Arduino E-STOP latch.
+Distance commands are forwarded without changing their values:
+
+```text
+MOVE FWD 2 10
+MOVE BWD 3 7
+```
+
+The Arduino returns `DONE` after both encoder targets have been reached.
+It first returns `ACK MOVE`; if no acknowledgement arrives within one second,
+the Pi cancels the distance state and sends a stop command. `ERR COMMAND`,
+`ERR ESTOP`, and `WATCHDOG` are printed as diagnostics.
 
 ## Test procedure
 
@@ -90,7 +112,7 @@ The additional `RESET` line is used only to clear the Arduino E-STOP latch.
 To test without a controller, send one packet from another terminal:
 
 ```bash
-python3 -c "import socket; socket.socket(socket.AF_INET,socket.SOCK_DGRAM).sendto(b'{\"x\":0.3,\"y\":0,\"left_stick_pressed\":false}',('127.0.0.1',5000))"
+python3 -c "import socket; socket.socket(socket.AF_INET,socket.SOCK_DGRAM).sendto(b'{\"x\":0.3,\"y\":0}',('127.0.0.1',5000))"
 ```
 
 Hardware-independent component tests can be run with:

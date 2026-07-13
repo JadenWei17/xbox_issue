@@ -16,7 +16,14 @@ from typing import Any
 class ControlInput:
     x: float
     y: float
-    left_stick_pressed: bool
+    received_at: float
+
+
+@dataclass(frozen=True)
+class DistanceMove:
+    direction: str
+    speed_level: int
+    distance_cm: int
     received_at: float
 
 
@@ -38,6 +45,7 @@ class UDPReceiver:
         self._lock = threading.Lock()
         self._latest: ControlInput | None = None
         self._safety_commands: deque[str] = deque()
+        self._distance_moves: deque[DistanceMove] = deque()
         self._packets = 0
         self._valid_packets = 0
         self._invalid_packets = 0
@@ -63,6 +71,12 @@ class UDPReceiver:
         with self._lock:
             commands = list(self._safety_commands)
             self._safety_commands.clear()
+            return commands
+
+    def pop_distance_moves(self) -> list[DistanceMove]:
+        with self._lock:
+            commands = list(self._distance_moves)
+            self._distance_moves.clear()
             return commands
 
     def stats(self) -> ReceiverStats:
@@ -104,11 +118,14 @@ class UDPReceiver:
                 elif command in ("ESTOP", "RESET"):
                     self._valid_packets += 1
                     self._safety_commands.append(command)
+                elif isinstance(command, DistanceMove):
+                    self._valid_packets += 1
+                    self._distance_moves.append(command)
                 else:
                     self._invalid_packets += 1
 
     @staticmethod
-    def _parse_packet(packet: bytes) -> ControlInput | str | None:
+    def _parse_packet(packet: bytes) -> ControlInput | DistanceMove | str | None:
         try:
             data: Any = json.loads(packet.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
@@ -117,19 +134,37 @@ class UDPReceiver:
             return None
         if set(data) == {"command"} and data["command"] in ("ESTOP", "RESET"):
             return data["command"]
-        x, y, pressed = data.get("x"), data.get("y"), data.get("left_stick_pressed")
+        if set(data) == {"command", "direction", "speed_level", "distance_cm"}:
+            command = data["command"]
+            direction = data["direction"]
+            speed_level = data["speed_level"]
+            distance_cm = data["distance_cm"]
+            if command != "MOVE" or direction not in ("FWD", "BWD"):
+                return None
+            if not isinstance(speed_level, int) or isinstance(speed_level, bool):
+                return None
+            if speed_level not in (1, 2, 3):
+                return None
+            if isinstance(distance_cm, bool) or not isinstance(distance_cm, int):
+                return None
+            if not 1 <= distance_cm <= 1000:
+                return None
+            return DistanceMove(
+                direction, speed_level, distance_cm, time.monotonic()
+            )
+        if set(data) != {"x", "y"}:
+            return None
+        x, y = data["x"], data["y"]
         if isinstance(x, bool) or isinstance(y, bool):
             return None
         if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
-            return None
-        if not isinstance(pressed, bool):
             return None
         x, y = float(x), float(y)
         if not math.isfinite(x) or not math.isfinite(y):
             return None
         if not -1.0 <= x <= 1.0 or not -1.0 <= y <= 1.0:
             return None
-        return ControlInput(x, y, pressed, time.monotonic())
+        return ControlInput(x, y, time.monotonic())
 
     def __enter__(self) -> "UDPReceiver":
         self.start()
