@@ -68,3 +68,17 @@
 
 ### 版本 / Version
 1.1
+
+## 7 月 14 日 / July 14
+
+### 做了什么 / What Was Done
+
+- 完成树莓派摄像头视频流的采集、编码与传输，将摄像头获取的画面编码为 H.264，并使用 RTP 格式封装后通过 UDP 发送，以满足低延迟视频传输需求。
+  Completed the capture, encoding, and transmission of the Raspberry Pi camera stream. The captured frames are encoded as H.264, encapsulated in RTP, and transmitted over UDP to support low-latency video delivery.
+- 将视频流分别发送至两个独立端口：UDP 5600 用于 Windows 端 MediaMTX 网页视频流，UDP 5004 用于后续 OpenCV 和深度学习处理，避免网页显示与视觉算法相互占用同一个视频输入端口。
+  Sent the video stream to two independent ports: UDP 5600 for the Windows MediaMTX web stream and UDP 5004 for future OpenCV and deep-learning processing, preventing the web viewer and vision algorithms from competing for the same video input port.
+
+### 问题与计划 / Issues and Plans
+
+### 版本 / Version
+2.0

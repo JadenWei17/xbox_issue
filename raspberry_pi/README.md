@@ -4,6 +4,21 @@ This program receives the newest Xbox left-stick state over UDP, smooths it,
 mixes it for differential drive, and sends wheel speeds to an Arduino over USB.
 If valid packets stop for 0.5 seconds, both motors are stopped automatically.
 
+## Directory responsibilities
+
+- `main.py` and the existing control modules implement Xbox UDP reception,
+  GPIO E-STOP, Arduino serial communication, and drive control.
+- `video/` is the independent libcamera H.264/RTP publishing service.
+- `scripts/` starts or stops video without stopping robot control.
+- `service_manager.py` can optionally supervise control and video as separate
+  child processes.
+- `VIDEO_README.md` contains complete camera, Windows receiver, WebRTC, and
+  troubleshooting instructions.
+
+The Windows RTP/OpenCV receiver, MediaMTX gateway, and browser service are
+stored separately in `../windows_video_client/`. The Raspberry Pi video module
+does not import or modify the control modules in this directory.
+
 ## Install and configure
 
 Requires Python 3.10 or newer. On the Raspberry Pi:

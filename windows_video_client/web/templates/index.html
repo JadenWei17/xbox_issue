@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Robot Live Video</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body data-width="{{ width }}" data-height="{{ height }}" data-fps="{{ fps }}"
+      data-mediamtx-port="{{ mediamtx_port }}" data-stream-path="{{ stream_path }}">
+  <main class="panel">
+    <header>
+      <div>
+        <p class="eyebrow">ROBOT CAMERA</p>
+        <h1>实时视频</h1>
+      </div>
+      <span id="status" class="status offline">已停止</span>
+    </header>
+
+    <section id="viewport" class="viewport">
+      <div id="placeholder">点击“开始播放”连接 WebRTC 视频</div>
+    </section>
+
+    <section class="metadata">
+      <span>分辨率 <strong>{{ width }} × {{ height }}</strong></span>
+      <span>帧率 <strong>{{ fps }} FPS</strong></span>
+      <span>传输 <strong>WebRTC / H.264</strong></span>
+    </section>
+
+    <nav>
+      <button id="start" class="primary">开始播放</button>
+      <button id="stop">停止播放</button>
+      <button id="reconnect">重新连接</button>
+    </nav>
+    <p id="message" class="message" aria-live="polite"></p>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
