@@ -6,7 +6,10 @@ import queue
 import threading
 from dataclasses import dataclass
 
-from config import MAX_DISTANCE_CM, MIN_DISTANCE_CM, VALID_SPEED_LEVELS
+from .config import (
+    MAX_ANGLE_DEG, MAX_DISTANCE_CM, MIN_ANGLE_DEG, MIN_DISTANCE_CM,
+    VALID_SPEED_LEVELS,
+)
 
 
 @dataclass(frozen=True)
@@ -21,6 +24,21 @@ class DistanceCommand:
             "direction": self.direction,
             "speed_level": self.speed_level,
             "distance_cm": self.distance_cm,
+        }
+
+
+@dataclass(frozen=True)
+class TurnCommand:
+    direction: str
+    speed_level: int
+    angle_deg: int
+
+    def as_dict(self) -> dict[str, str | int]:
+        return {
+            "command": "TURN",
+            "direction": self.direction,
+            "speed_level": self.speed_level,
+            "angle_deg": self.angle_deg,
         }
 
 
@@ -44,6 +62,24 @@ def parse_distance_command(text: str) -> DistanceCommand:
         speed_level=speed_level,
         distance_cm=distance_cm,
     )
+
+
+def parse_motion_command(text: str) -> DistanceCommand | TurnCommand:
+    parts = text.strip().lower().split()
+    if len(parts) != 3 or parts[0] not in ("w", "s", "a", "d"):
+        raise ValueError("use: w/s <speed_level> <distance_cm> or a/d <speed_level> <angle_deg>")
+    if parts[0] in ("w", "s"):
+        return parse_distance_command(text)
+    try:
+        speed_level = int(parts[1])
+        angle_deg = int(parts[2])
+    except ValueError as error:
+        raise ValueError("speed_level and angle_deg must be integers") from error
+    if speed_level not in VALID_SPEED_LEVELS:
+        raise ValueError(f"speed_level must be one of {VALID_SPEED_LEVELS}")
+    if not MIN_ANGLE_DEG <= angle_deg <= MAX_ANGLE_DEG:
+        raise ValueError(f"angle_deg must be in [{MIN_ANGLE_DEG}, {MAX_ANGLE_DEG}]")
+    return TurnCommand("LEFT" if parts[0] == "a" else "RIGHT", speed_level, angle_deg)
 
 
 class KeyboardInput:

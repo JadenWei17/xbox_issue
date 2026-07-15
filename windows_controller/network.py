@@ -6,7 +6,7 @@ import json
 import socket
 from typing import Any
 
-from config import RASPBERRY_PI_IP, RASPBERRY_PI_PORT
+from .config import RASPBERRY_PI_IP, RASPBERRY_PI_PORT
 
 
 class RaspberryPiClient:

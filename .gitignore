@@ -27,7 +27,14 @@ Thumbs.db
 !.env.example
 
 # Runtime state for independent robot services
-raspberry_pi/.run/
+pi_deploy/control_service/.run/
+pi_deploy/video_service/.run/
+
+# Local service logs
+*.stdout.log
+*.stderr.log
+runtime_logs/
+.run/
 
 # Local MediaMTX binary and generated TLS credentials
 mediamtx.exe

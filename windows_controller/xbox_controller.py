@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pygame
 
-from config import LEFT_STICK_DEADZONE
+from .config import LEFT_STICK_DEADZONE
 
 
 LEFT_STICK_HORIZONTAL_AXIS = 0

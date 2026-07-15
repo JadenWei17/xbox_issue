@@ -1,0 +1,25 @@
+[Unit]
+Description=Robot independent low-latency video service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sws3009b2
+WorkingDirectory=/home/sws3009b2/robot/video_service
+ExecStart=/home/sws3009b2/robot/.venv/bin/python main.py
+Environment=VIDEO_TARGET_IP=100.67.201.122
+Restart=on-failure
+RestartSec=3
+Nice=10
+CPUWeight=20
+# Pi 5 has no hardware H.264 encoder. Bound software encoding so it cannot
+# consume every CPU core and starve the independent control service.
+CPUQuota=150%
+IOWeight=20
+OOMScoreAdjust=500
+KillSignal=SIGINT
+TimeoutStopSec=8
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Robot Control Center</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body data-width="{{ width }}" data-height="{{ height }}" data-fps="{{ fps }}"
+      data-mediamtx-host="{{ mediamtx_host }}"
+      data-mediamtx-port="{{ mediamtx_port }}" data-stream-path="{{ stream_path }}">
+  <main class="panel">
+    <header>
+      <div>
+        <p class="eyebrow">ROBOT CONTROL CENTER</p>
+        <h1>小车控制台</h1>
+      </div>
+      <span id="status" class="status offline">视频未连接</span>
+    </header>
+
+    <section class="telemetry-bar" aria-label="实时状态">
+      <span>连接 <strong id="telemetry-online">离线</strong></span>
+      <span>模式 <strong id="robot-mode">--</strong></span>
+      <span>超声 <strong id="ultrasonic">-- cm</strong></span>
+      <span>左/右 PWM <strong id="wheel-pwm">-- / --</strong></span>
+      <span>航向 <strong id="heading">--°</strong></span>
+      <span>位置 <strong id="position">--, -- cm</strong></span>
+    </section>
+
+    <section class="services" aria-label="服务管理">
+      <article class="service-card" data-service="control">
+        <div>
+          <h2>控制服务</h2>
+          <p>Windows 手柄发送端 + Pi 电机控制端</p>
+        </div>
+        <div class="service-state"><span class="dot"></span><span>检查中</span></div>
+        <div class="service-actions">
+          <button class="service-start danger">启动控制</button>
+          <button class="service-stop">停止控制</button>
+        </div>
+      </article>
+
+      <article class="service-card" data-service="video">
+        <div>
+          <h2>视频服务</h2>
+          <p>Windows MediaMTX 接收端 + Pi 摄像头发送端</p>
+        </div>
+        <div class="service-state"><span class="dot"></span><span>检查中</span></div>
+        <div class="service-actions">
+          <button class="service-start primary">启动视频</button>
+          <button class="service-stop">停止视频</button>
+        </div>
+      </article>
+    </section>
+    <p id="service-message" class="message" aria-live="polite"></p>
+
+    <section id="keyboard-panel" class="keyboard-panel" hidden>
+      <label for="motion-command">键盘模式命令</label>
+      <div class="command-row">
+        <input id="motion-command" autocomplete="off" placeholder="例如：w 2 50 或 a 1 90">
+        <button id="send-command" class="primary compact">发送</button>
+      </div>
+      <small>速度 1 = PWM 200，速度 2 = PWM 255；w/s：厘米，a/d：角度</small>
+      <p id="command-message" class="message" aria-live="polite"></p>
+    </section>
+
+    <section id="viewport" class="viewport">
+      <div id="placeholder">启动视频服务后，点击“开始播放”</div>
+    </section>
+
+    <section class="metadata">
+      <span>分辨率 <strong>{{ width }} × {{ height }}</strong></span>
+      <span>帧率 <strong>{{ fps }} FPS</strong></span>
+      <span>传输 <strong>WebRTC / H.264</strong></span>
+    </section>
+
+    <nav>
+      <button id="start" class="primary">开始播放</button>
+      <button id="stop">停止播放</button>
+      <button id="reconnect">重新连接</button>
+    </nav>
+    <p id="message" class="message" aria-live="polite"></p>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

@@ -2,8 +2,30 @@
 
 This sketch targets an Arduino Mega 2560 with an Adafruit Motor Shield V1. It drives
 the shield's 74HC595 direction register and PWM pins directly, so no
-third-party library is required. Open `arduino.ino` in the Arduino
-IDE, select the board and serial port, then upload.
+third-party library is required. Open `arduino.ino` in the Arduino IDE; all
+other `.ino` and `.h` files in this directory are compiled as the same sketch.
+Select Arduino Mega 2560 and the serial port, then verify and upload.
+
+## Source layout
+
+| File | Responsibility |
+| --- | --- |
+| `arduino.ino` | Shared runtime state, `setup()`, and `loop()` only |
+| `MotorControl.ino` | Motor Shield output and encoder interrupts |
+| `Navigation.ino` | MPU6500 sampling and robot pose estimation |
+| `MotionControl.ino` | PID, distance moves, turns, and wheel synchronization |
+| `Safety.ino` | E-STOP, active braking, and ultrasonic state machine |
+| `CommandProtocol.ino` | Strict serial parsing and command dispatch |
+| `Telemetry.ino` | Non-blocking status and completion messages |
+| `HardwareConfig.h` | Pins, shield bit mapping, and motor reversal |
+| `ControlConfig.h` | PID, calibration, speed, timing, and safety thresholds |
+| `CommunicationConfig.h` | Baud rate, watchdog, buffer, and telemetry timing |
+| `Types.h` | Shared enums, pose type, and PID controller type |
+| `Config.h` | Small aggregate include for the three configuration files |
+
+Hardware rewiring should normally require changes only in
+`HardwareConfig.h`. Vehicle tuning belongs in `ControlConfig.h`; serial timing
+belongs in `CommunicationConfig.h`.
 
 Motor allocation:
 
@@ -72,8 +94,10 @@ MOVE FWD 2 10
 MOVE BWD 3 7
 ```
 
-Direction is `FWD` or `BWD`; speed levels 1, 2, and 3 map to PWM values 85,
-170, and 255. Distance is an integer from 1 to 1000 cm. The target encoder
+Direction is `FWD` or `BWD`; speed levels 1, 2, and 3 map to the values in
+`MOVE_SPEED_LEVEL_PWM` (currently level 1 = 200 and level 2 = 255). Level 3 is
+rejected. Distance is an integer
+from 1 to 1000 cm. The target encoder
 count is rounded upward. With 4 counts per wheel revolution and a 21.8 cm wheel
 circumference, one count represents 5.45 cm. The Arduino sends `DONE` when both
 sides reach the target. Each side is stopped independently when it reaches the
@@ -81,7 +105,7 @@ target, preventing the faster side from travelling farther while waiting for
 the slower side.
 
 Every distance move starts with a non-blocking 150 ms PWM 200 boost when the
-selected cruise PWM is lower, then returns to the configured 85/170/255 level.
+selected cruise PWM is lower, then returns to the configured speed level.
 If either encoder makes no progress for 3 seconds, all motors stop and Arduino
 returns `ERR STALL LEFT`, `ERR STALL RIGHT`, or `ERR STALL BOTH`.
 

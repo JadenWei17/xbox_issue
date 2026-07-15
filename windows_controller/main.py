@@ -5,10 +5,11 @@ from __future__ import annotations
 import time
 from enum import Enum
 
-from config import SEND_INTERVAL_SECONDS, SEND_RATE_HZ
-from keyboard_input import KeyboardInput, parse_distance_command
-from network import RaspberryPiClient
-from xbox_controller import XboxController
+from .config import SEND_INTERVAL_SECONDS, SEND_RATE_HZ
+from .keyboard_input import KeyboardInput, parse_motion_command
+from .network import RaspberryPiClient
+from .runtime_status import write_status
+from .xbox_controller import XboxController
 
 
 class ControlMode(Enum):
@@ -24,6 +25,7 @@ def main() -> None:
     previous_dpad = (0, 0)
     mode = ControlMode.MANUAL
     keyboard = KeyboardInput()
+    next_status_write = 0.0
 
     try:
         controller.connect()
@@ -31,12 +33,16 @@ def main() -> None:
         print(f"Controller: {controller.name}")
         print(f"Sending UDP left-stick states at {SEND_RATE_HZ:g} Hz.")
         print("D-pad Up: MANUAL_MODE; D-pad Right: DISTANCE_MODE.")
-        print("Distance command: w/s <speed_level 1-3> <distance_cm>.")
+        print("Motion command: w/s <level 1-2> <distance_cm>; a/d <level 1-2> <angle_deg>.")
         print("Press Ctrl+C to stop.")
 
         next_send_time = time.monotonic()
 
         while True:
+            now = time.monotonic()
+            if now >= next_status_write:
+                write_status(mode.value)
+                next_status_write = now + 1.0
             state = controller.read()
             if state.estop_pressed and not previous_estop_pressed:
                 client.send({"command": "ESTOP"})
@@ -58,8 +64,12 @@ def main() -> None:
 
             mode_changed = requested_mode is not mode
             if requested_mode is not mode:
-                client.send({"x": 0.0, "y": 0.0})
+                if requested_mode is ControlMode.DISTANCE:
+                    client.send({"command": "IDLE"})
+                else:
+                    client.send({"x": 0.0, "y": 0.0})
                 mode = requested_mode
+                write_status(mode.value)
                 print(f"Mode: {mode.value} (stop sent).", flush=True)
 
             for line in keyboard.pop_lines():
@@ -67,12 +77,12 @@ def main() -> None:
                     print("Ignored keyboard command outside DISTANCE_MODE.", flush=True)
                     continue
                 try:
-                    command = parse_distance_command(line)
+                    command = parse_motion_command(line)
                 except ValueError as error:
-                    print(f"Invalid distance command: {error}", flush=True)
+                    print(f"Invalid motion command: {error}", flush=True)
                 else:
                     client.send(command.as_dict())
-                    print(f"MOVE sent: {command}", flush=True)
+                    print(f"Command sent: {command.as_dict()}", flush=True)
 
             if mode is ControlMode.MANUAL and not mode_changed:
                 data = state.as_dict()
@@ -93,6 +103,7 @@ def main() -> None:
         print(f"Error: {error}")
         raise SystemExit(1) from error
     finally:
+        write_status("STOPPED")
         client.close()
         controller.close()
 

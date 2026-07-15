@@ -1,0 +1,1 @@
+# Python standard library only. mediamtx.exe is stored in the project root.

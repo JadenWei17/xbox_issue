@@ -1,0 +1,25 @@
+logLevel: info
+logDestinations: [stdout]
+writeQueueSize: 64
+udpMaxPayloadSize: 1316
+
+rtsp: false
+rtmp: false
+hls: false
+srt: false
+playback: false
+api: false
+metrics: false
+pprof: false
+
+webrtc: true
+webrtcAddress: :__WEBRTC_PORT__
+webrtcEncryption: false
+webrtcAllowOrigins: ["*"]
+webrtcLocalUDPAddress: :__ICE_PORT__
+webrtcLocalTCPAddress: ""
+webrtcIPsFromInterfaces: true
+
+paths:
+  __STREAM_PATH__:
+    source: udp+mpegts://__UDP_HOST__:__UDP_PORT__
