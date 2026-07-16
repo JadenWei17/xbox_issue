@@ -3,83 +3,61 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Robot Control Center</title>
+  <title>小车控制台</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body data-width="{{ width }}" data-height="{{ height }}" data-fps="{{ fps }}"
       data-mediamtx-host="{{ mediamtx_host }}"
       data-mediamtx-port="{{ mediamtx_port }}" data-stream-path="{{ stream_path }}">
-  <main class="panel">
-    <header>
-      <div>
-        <p class="eyebrow">ROBOT CONTROL CENTER</p>
-        <h1>小车控制台</h1>
-      </div>
-      <span id="status" class="status offline">视频未连接</span>
+  <main class="dashboard">
+    <header class="topbar">
+      <div><p class="eyebrow">ROBOT CONTROL CENTER</p><h1>小车控制台</h1></div>
+      <div class="header-status"><span id="telemetry-state" class="chip offline">小车离线</span><span id="status" class="chip offline">视频未连接</span></div>
     </header>
 
     <section class="telemetry-bar" aria-label="实时状态">
-      <span>连接 <strong id="telemetry-online">离线</strong></span>
       <span>模式 <strong id="robot-mode">--</strong></span>
-      <span>超声 <strong id="ultrasonic">-- cm</strong></span>
-      <span>左/右 PWM <strong id="wheel-pwm">-- / --</strong></span>
+      <span>超声波 <strong id="ultrasonic">-- cm</strong></span>
+      <span>左 / 右 PWM <strong id="wheel-pwm">-- / --</strong></span>
       <span>航向 <strong id="heading">--°</strong></span>
       <span>位置 <strong id="position">--, -- cm</strong></span>
     </section>
 
-    <section class="services" aria-label="服务管理">
-      <article class="service-card" data-service="control">
-        <div>
-          <h2>控制服务</h2>
-          <p>Windows 手柄发送端 + Pi 电机控制端</p>
-        </div>
-        <div class="service-state"><span class="dot"></span><span>检查中</span></div>
-        <div class="service-actions">
-          <button class="service-start danger">启动控制</button>
-          <button class="service-stop">停止控制</button>
-        </div>
-      </article>
+    <div class="workspace">
+      <section class="left-column">
+        <article class="card video-card">
+          <div class="card-heading"><div><p class="section-label">LIVE VIEW</p><h2>实时画面</h2></div><span>{{ width }} × {{ height }} · {{ fps }} FPS</span></div>
+          <div id="viewport" class="viewport"><div id="placeholder"><strong>画面尚未启动</strong><span>请先启动视频服务，再点击右侧启动按钮</span></div></div>
+          <p id="message" class="message" aria-live="polite"></p>
+        </article>
 
-      <article class="service-card" data-service="video">
-        <div>
-          <h2>视频服务</h2>
-          <p>Windows MediaMTX 接收端 + Pi 摄像头发送端</p>
-        </div>
-        <div class="service-state"><span class="dot"></span><span>检查中</span></div>
-        <div class="service-actions">
-          <button class="service-start primary">启动视频</button>
-          <button class="service-stop">停止视频</button>
-        </div>
-      </article>
-    </section>
-    <p id="service-message" class="message" aria-live="polite"></p>
+        <article id="keyboard-panel" class="card command-card">
+          <div class="card-heading"><div><p class="section-label">COMMAND</p><h2>指令输入</h2></div><span id="command-hint">需切换至 DISTANCE_MODE</span></div>
+          <div class="command-row"><input id="motion-command" autocomplete="off" placeholder="例如：w 2 50 或 a 1 90" disabled><button id="send-command" class="primary" disabled>发送</button></div>
+          <small>速度 1 = PWM 200，速度 2 = PWM 255；w/s：厘米，a/d：角度</small>
+          <p id="command-message" class="message" aria-live="polite"></p>
+        </article>
+      </section>
 
-    <section id="keyboard-panel" class="keyboard-panel" hidden>
-      <label for="motion-command">键盘模式命令</label>
-      <div class="command-row">
-        <input id="motion-command" autocomplete="off" placeholder="例如：w 2 50 或 a 1 90">
-        <button id="send-command" class="primary compact">发送</button>
-      </div>
-      <small>速度 1 = PWM 200，速度 2 = PWM 255；w/s：厘米，a/d：角度</small>
-      <p id="command-message" class="message" aria-live="polite"></p>
-    </section>
+      <aside class="right-column">
+        <article class="card launch-card">
+          <div class="card-heading"><div><p class="section-label">SYSTEM</p><h2>启动与服务</h2></div></div>
+          <div class="service-list">
+            <div class="service-row" data-service="control"><div><span class="service-state"><i></i><strong>控制服务</strong></span><small>检查中</small></div><div class="service-actions"><button class="service-start danger">启动</button><button class="service-stop">停止</button></div></div>
+            <div class="service-row" data-service="video"><div><span class="service-state"><i></i><strong>视频服务</strong></span><small>检查中</small></div><div class="service-actions"><button class="service-start primary">启动</button><button class="service-stop">停止</button></div></div>
+          </div>
+          <button id="start" class="main-start">▶ 启动画面</button>
+          <div class="playback-actions"><button id="stop">停止画面</button><button id="reconnect">重新连接</button></div>
+          <p id="service-message" class="message" aria-live="polite"></p>
+        </article>
 
-    <section id="viewport" class="viewport">
-      <div id="placeholder">启动视频服务后，点击“开始播放”</div>
-    </section>
-
-    <section class="metadata">
-      <span>分辨率 <strong>{{ width }} × {{ height }}</strong></span>
-      <span>帧率 <strong>{{ fps }} FPS</strong></span>
-      <span>传输 <strong>WebRTC / H.264</strong></span>
-    </section>
-
-    <nav>
-      <button id="start" class="primary">开始播放</button>
-      <button id="stop">停止播放</button>
-      <button id="reconnect">重新连接</button>
-    </nav>
-    <p id="message" class="message" aria-live="polite"></p>
+        <article class="card trajectory-card">
+          <div class="card-heading"><div><p class="section-label">TRAJECTORY</p><h2>小车轨迹</h2></div><div class="trajectory-actions"><button id="toggle-trajectory" class="compact primary">启动轨迹</button><button id="clear-trajectory" class="compact">清空</button></div></div>
+          <div class="canvas-wrap"><canvas id="trajectory-canvas"></canvas><div id="trajectory-empty">轨迹显示未启动</div></div>
+          <div class="trajectory-legend"><span><i class="start-dot"></i>起点</span><span><i class="car-dot"></i>当前位置</span><span id="trajectory-points">0 个轨迹点</span></div>
+        </article>
+      </aside>
+    </div>
   </main>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

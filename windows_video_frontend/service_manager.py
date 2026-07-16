@@ -91,6 +91,8 @@ class ServiceManager:
         pair = self._pair(name)
         pid = self._read_pid(name)
         local = self._pid_running(pid)
+        if pid is not None and not local:
+            self._pid_file(name).unlink(missing_ok=True)
         remote = self._remote_active(pair.remote_unit)
         return {
             "local": local,

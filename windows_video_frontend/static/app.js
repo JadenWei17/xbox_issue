@@ -1,167 +1,35 @@
 "use strict";
 
-const body = document.body;
-const viewport = document.getElementById("viewport");
-const placeholder = document.getElementById("placeholder");
-const statusBadge = document.getElementById("status");
-const message = document.getElementById("message");
-const serviceMessage = document.getElementById("service-message");
-const keyboardPanel = document.getElementById("keyboard-panel");
-const commandInput = document.getElementById("motion-command");
-const commandMessage = document.getElementById("command-message");
-let player = null;
+const body=document.body, viewport=document.getElementById("viewport"), placeholder=document.getElementById("placeholder");
+const statusBadge=document.getElementById("status"), message=document.getElementById("message"), serviceMessage=document.getElementById("service-message");
+const commandInput=document.getElementById("motion-command"), commandButton=document.getElementById("send-command"), commandMessage=document.getElementById("command-message");
+const canvas=document.getElementById("trajectory-canvas"), context=canvas.getContext("2d");
+const aiCanvas=document.createElement("canvas"), aiContext=aiCanvas.getContext("2d"), aiStatus=document.createElement("span"), AI_API="http://127.0.0.1:8091";
+aiCanvas.id="ai-overlay";aiCanvas.setAttribute("aria-label","AI detection overlay");viewport.appendChild(aiCanvas);aiStatus.id="ai-status";aiStatus.className="chip offline";aiStatus.textContent="AI 离线";document.querySelector(".header-status").prepend(aiStatus);
+document.querySelector(".service-list").insertAdjacentHTML("beforeend",'<div class="service-row" data-service="ai"><div><span class="service-state"><i></i><strong>AI 服务</strong></span><small>检查中</small></div><div class="service-actions"><button class="service-start primary">启动</button><button class="service-stop">停止</button></div></div>');
+let player=null, trajectory=[], trajectoryEnabled=false;
 
-function playerUrl() {
-  const host = body.dataset.mediamtxHost || location.hostname;
-  return `${location.protocol}//${host}:${body.dataset.mediamtxPort}/${body.dataset.streamPath}`;
-}
+function playerUrl(){const host=body.dataset.mediamtxHost||location.hostname;return `${location.protocol}//${host}:${body.dataset.mediamtxPort}/${body.dataset.streamPath}`;}
+function setVideoStatus(label,state,detail=""){statusBadge.textContent=label;statusBadge.className=`chip ${state}`;message.textContent=detail;}
+function describeService(status){if(status.running)return["运行中","online"];if(status.local&&!status.pi)return["仅 Windows 运行","partial"];if(!status.local&&status.pi)return["仅 Pi 运行","partial"];return["已停止","offline"];}
+function updateServiceCard(name,status){const card=document.querySelector(`[data-service="${name}"]`);if(!card)return;const[label,state]=describeService(status),el=card.querySelector(".service-state");el.className=`service-state ${state}`;card.querySelector("small").textContent=label;}
+async function refreshServices(){try{const response=await fetch("/api/services",{cache:"no-store"}),services=await response.json();if(!response.ok)throw new Error(services.error||"状态读取失败");Object.entries(services).forEach(([name,status])=>updateServiceCard(name,status));}catch(error){serviceMessage.textContent=error.message;}}
+async function serviceAction(name,action){const card=document.querySelector(`[data-service="${name}"]`),buttons=card.querySelectorAll("button"),serviceName={control:"控制",video:"视频",ai:"AI"}[name]||name;buttons.forEach(b=>b.disabled=true);serviceMessage.textContent=`正在${action==="start"?"启动":"停止"}${serviceName}服务…`;try{const response=await fetch(`/api/services/${name}/${action}`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}),result=await response.json();if(!response.ok)throw new Error(result.error||"操作失败");updateServiceCard(name,result);serviceMessage.textContent="操作完成";}catch(error){serviceMessage.textContent=`操作失败：${error.message}`;}finally{buttons.forEach(b=>b.disabled=false);setTimeout(refreshServices,1000);}}
+function display(value,fallback="--"){return value===null||value===undefined?fallback:value;}
 
-function setVideoStatus(label, state, detail = "") {
-  statusBadge.textContent = label;
-  statusBadge.className = `status ${state}`;
-  message.textContent = detail;
-}
+function drawDetections(data){const rect=aiCanvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1,w=Math.max(1,rect.width),h=Math.max(1,rect.height);if(aiCanvas.width!==Math.round(w*dpr)||aiCanvas.height!==Math.round(h*dpr)){aiCanvas.width=Math.round(w*dpr);aiCanvas.height=Math.round(h*dpr);}aiContext.setTransform(dpr,0,0,dpr,0,0);aiContext.clearRect(0,0,w,h);if(!data.online||!data.width||!data.height)return;const scale=Math.min(w/data.width,h/data.height),ox=(w-data.width*scale)/2,oy=(h-data.height*scale)/2;aiContext.font="600 13px Segoe UI, sans-serif";aiContext.lineWidth=2;for(const item of data.detections||[]){const[x1,y1,x2,y2]=item.box,x=ox+x1*scale,y=oy+y1*scale,bw=(x2-x1)*scale,bh=(y2-y1)*scale,label=`${item.class_name} ${(item.confidence*100).toFixed(0)}%`;aiContext.strokeStyle="#55dfc1";aiContext.fillStyle="#55dfc1";aiContext.strokeRect(x,y,bw,bh);const tw=aiContext.measureText(label).width+10,ty=Math.max(0,y-22);aiContext.fillRect(x,ty,tw,22);aiContext.fillStyle="#06231c";aiContext.fillText(label,x+5,ty+15);}}
+async function refreshAI(){try{const response=await fetch(`${AI_API}/api/detections`,{cache:"no-store"}),data=await response.json();if(!response.ok)throw new Error(data.error||"AI status unavailable");aiStatus.textContent=data.online?`AI ${data.detections.length} 个目标`:data.stream?"AI 等待画面":"AI 离线";aiStatus.className=`chip ${data.online?"online":data.stream?"connecting":"offline"}`;aiStatus.title=data.error||`${data.model||"model"} · GPU ${data.device}`;drawDetections(data);}catch(error){aiStatus.textContent="AI 离线";aiStatus.className="chip offline";aiStatus.title=error.message;aiContext.clearRect(0,0,aiCanvas.width,aiCanvas.height);}}
 
-function describeService(status) {
-  if (status.running) return ["运行中", "online"];
-  if (status.local && !status.pi) return ["仅 Windows 运行", "partial"];
-  if (!status.local && status.pi) return ["仅 Pi 运行", "partial"];
-  return ["已停止", "offline"];
-}
+function addTrajectoryPoint(x,y,heading){if(!trajectoryEnabled)return;x=Number(x);y=Number(y);heading=Number(heading)||0;if(!Number.isFinite(x)||!Number.isFinite(y))return;const last=trajectory.at(-1);if(!last||Math.hypot(x-last.x,y-last.y)>=.5){trajectory.push({x,y,heading});if(trajectory.length>2000)trajectory.shift();drawTrajectory();}else if(last){last.heading=heading;}}
+function drawTrajectory(){const rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1,w=Math.max(1,rect.width),h=Math.max(1,rect.height);if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}context.setTransform(dpr,0,0,dpr,0,0);context.clearRect(0,0,w,h);document.getElementById("trajectory-empty").hidden=trajectory.length>0;document.getElementById("trajectory-points").textContent=`${trajectory.length} 个轨迹点`;if(!trajectory.length)return;const xs=trajectory.map(p=>p.x),ys=trajectory.map(p=>p.y),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),rangeX=Math.max(40,maxX-minX),rangeY=Math.max(40,maxY-minY),scale=Math.min((w-48)/rangeX,(h-48)/rangeY),cx=(minX+maxX)/2,cy=(minY+maxY)/2,map=p=>({x:w/2+(p.x-cx)*scale,y:h/2-(p.y-cy)*scale});context.lineCap="round";context.lineJoin="round";context.strokeStyle="#55dfc1";context.lineWidth=3;context.shadowColor="#55dfc188";context.shadowBlur=7;context.beginPath();trajectory.forEach((p,i)=>{const q=map(p);i?context.lineTo(q.x,q.y):context.moveTo(q.x,q.y);});context.stroke();context.shadowBlur=0;const start=map(trajectory[0]);context.fillStyle="#ffc968";context.beginPath();context.arc(start.x,start.y,5,0,Math.PI*2);context.fill();const car=trajectory.at(-1),end=map(car),angle=(car.heading-90)*Math.PI/180;context.save();context.translate(end.x,end.y);context.rotate(angle);context.fillStyle="#55dfc1";context.beginPath();context.moveTo(10,0);context.lineTo(-7,-6);context.lineTo(-4,0);context.lineTo(-7,6);context.closePath();context.fill();context.restore();}
 
-function updateServiceCard(name, status) {
-  const card = document.querySelector(`[data-service="${name}"]`);
-  if (!card) return;
-  const [label, state] = describeService(status);
-  const stateElement = card.querySelector(".service-state");
-  stateElement.className = `service-state ${state}`;
-  stateElement.querySelector("span:last-child").textContent = label;
-}
-
-async function refreshServices() {
-  try {
-    const response = await fetch("/api/services", {cache: "no-store"});
-    const services = await response.json();
-    if (!response.ok) throw new Error(services.error || "状态读取失败");
-    Object.entries(services).forEach(([name, status]) => updateServiceCard(name, status));
-  } catch (error) {
-    serviceMessage.textContent = error.message;
-  }
-}
-
-async function serviceAction(name, action) {
-  const card = document.querySelector(`[data-service="${name}"]`);
-  const buttons = card.querySelectorAll("button");
-  buttons.forEach(button => { button.disabled = true; });
-  serviceMessage.textContent = `${action === "start" ? "正在启动" : "正在停止"}${name === "control" ? "控制" : "视频"}服务…`;
-  try {
-    const response = await fetch(`/api/services/${name}/${action}`, {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: "{}",
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "操作失败");
-    updateServiceCard(name, result);
-    serviceMessage.textContent = "操作完成";
-  } catch (error) {
-    serviceMessage.textContent = `操作失败：${error.message}`;
-  } finally {
-    buttons.forEach(button => { button.disabled = false; });
-    window.setTimeout(refreshServices, 1000);
-  }
-}
-
-function display(value, fallback = "--") {
-  return value === null || value === undefined ? fallback : value;
-}
-
-async function refreshRobotStatus() {
-  try {
-    const response = await fetch("/api/robot-status", {cache: "no-store"});
-    const data = await response.json();
-    const telemetry = data.telemetry || {};
-    const controller = data.controller || {};
-    document.getElementById("telemetry-online").textContent = telemetry.online ? "在线" : "离线";
-    document.getElementById("robot-mode").textContent = display(telemetry.mode, controller.mode);
-    document.getElementById("ultrasonic").textContent = telemetry.us == null ? "无有效读数" : `${telemetry.us} cm`;
-    document.getElementById("wheel-pwm").textContent = `${display(telemetry.lpwm)} / ${display(telemetry.rpwm)}`;
-    document.getElementById("heading").textContent = `${display(telemetry.h)}°`;
-    document.getElementById("position").textContent = `${display(telemetry.x)}, ${display(telemetry.y)} cm`;
-    keyboardPanel.hidden = !(controller.online && controller.mode === "DISTANCE_MODE");
-  } catch (_) {
-    document.getElementById("telemetry-online").textContent = "离线";
-  }
-}
-
-async function sendMotionCommand() {
-  const text = commandInput.value.trim();
-  if (!text) return;
-  const button = document.getElementById("send-command");
-  button.disabled = true;
-  try {
-    const response = await fetch("/api/motion-command", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({command: text}),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "发送失败");
-    commandMessage.textContent = `已发送：${JSON.stringify(result.sent)}`;
-    commandInput.value = "";
-  } catch (error) {
-    commandMessage.textContent = `发送失败：${error.message}`;
-  } finally {
-    button.disabled = false;
-  }
-}
-
-document.getElementById("send-command").addEventListener("click", sendMotionCommand);
-commandInput.addEventListener("keydown", event => {
-  if (event.key === "Enter") sendMotionCommand();
-});
-
-document.querySelectorAll(".service-card").forEach(card => {
-  const name = card.dataset.service;
-  card.querySelector(".service-start").addEventListener("click", () => {
-    if (name !== "control" || window.confirm("确认车轮已架空或小车处于安全区域，并启动控制服务？")) {
-      serviceAction(name, "start");
-    }
-  });
-  card.querySelector(".service-stop").addEventListener("click", () => serviceAction(name, "stop"));
-});
-
-function startPlayback() {
-  if (player) return;
-  setVideoStatus("连接中", "connecting", "正在建立 WebRTC 连接…");
-  player = document.createElement("iframe");
-  player.title = "Robot WebRTC video";
-  player.allow = "autoplay; fullscreen";
-  player.src = playerUrl();
-  player.addEventListener("load", () => {
-    setVideoStatus("已连接", "online", `${body.dataset.width} × ${body.dataset.height} · ${body.dataset.fps} FPS`);
-  }, {once: true});
-  placeholder.hidden = true;
-  viewport.appendChild(player);
-}
-
-function stopPlayback() {
-  if (player) {
-    player.remove();
-    player = null;
-  }
-  placeholder.hidden = false;
-  setVideoStatus("视频未连接", "offline", "播放器已停止，视频服务状态不受影响。");
-}
-
-document.getElementById("start").addEventListener("click", startPlayback);
-document.getElementById("stop").addEventListener("click", stopPlayback);
-document.getElementById("reconnect").addEventListener("click", () => {
-  stopPlayback();
-  window.setTimeout(startPlayback, 150);
-});
-
-refreshServices();
-window.setInterval(refreshServices, 5000);
-refreshRobotStatus();
-window.setInterval(refreshRobotStatus, 500);
+async function refreshRobotStatus(){try{const response=await fetch("/api/robot-status",{cache:"no-store"}),data=await response.json(),telemetry=data.telemetry||{},controller=data.controller||{},online=Boolean(telemetry.online),ready=Boolean(controller.online&&controller.mode==="DISTANCE_MODE"),badge=document.getElementById("telemetry-state");badge.textContent=online?"小车在线":"小车离线";badge.className=`chip ${online?"online":"offline"}`;document.getElementById("robot-mode").textContent=display(telemetry.mode,controller.mode);document.getElementById("ultrasonic").textContent=telemetry.us==null?"无有效读数":`${telemetry.us} cm`;document.getElementById("wheel-pwm").textContent=`${display(telemetry.lpwm)} / ${display(telemetry.rpwm)}`;document.getElementById("heading").textContent=`${display(telemetry.h)}°`;document.getElementById("position").textContent=`${display(telemetry.x)}, ${display(telemetry.y)} cm`;commandInput.disabled=!ready;commandButton.disabled=!ready;document.getElementById("command-hint").textContent=ready?"可发送指令":"需切换至 DISTANCE_MODE";if(online)addTrajectoryPoint(telemetry.x,telemetry.y,telemetry.h);}catch(_){document.getElementById("telemetry-state").textContent="小车离线";}}
+async function sendMotionCommand(){const text=commandInput.value.trim();if(!text)return;commandButton.disabled=true;try{const response=await fetch("/api/motion-command",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({command:text})}),result=await response.json();if(!response.ok)throw new Error(result.error||"发送失败");commandMessage.textContent=`已发送：${JSON.stringify(result.sent)}`;commandInput.value="";}catch(error){commandMessage.textContent=`发送失败：${error.message}`;}finally{commandButton.disabled=false;}}
+commandButton.addEventListener("click",sendMotionCommand);commandInput.addEventListener("keydown",event=>{if(event.key==="Enter")sendMotionCommand();});
+document.querySelectorAll(".service-row").forEach(card=>{const name=card.dataset.service;card.querySelector(".service-start").addEventListener("click",()=>{if(name!=="control"||confirm("请确认车轮已架空或小车处于安全区域，然后启动控制服务。"))serviceAction(name,"start");});card.querySelector(".service-stop").addEventListener("click",()=>serviceAction(name,"stop"));});
+function startPlayback(){if(player)return;setVideoStatus("连接中","connecting","正在建立 WebRTC 连接…");player=document.createElement("iframe");player.title="小车实时视频";player.allow="autoplay; fullscreen";player.src=playerUrl();player.addEventListener("load",()=>setVideoStatus("视频已连接","online",`${body.dataset.width} × ${body.dataset.height} · ${body.dataset.fps} FPS`),{once:true});placeholder.hidden=true;viewport.appendChild(player);}
+function stopPlayback(){if(player){player.remove();player=null;}placeholder.hidden=false;setVideoStatus("视频未连接","offline","播放器已停止，视频服务不受影响。");}
+document.getElementById("start").addEventListener("click",startPlayback);document.getElementById("stop").addEventListener("click",stopPlayback);document.getElementById("reconnect").addEventListener("click",()=>{stopPlayback();setTimeout(startPlayback,150);});
+document.getElementById("toggle-trajectory").addEventListener("click",event=>{trajectoryEnabled=!trajectoryEnabled;event.currentTarget.textContent=trajectoryEnabled?"停止轨迹":"启动轨迹";event.currentTarget.classList.toggle("primary",!trajectoryEnabled);document.getElementById("trajectory-empty").textContent=trajectoryEnabled?"等待位置数据…":"轨迹显示未启动";if(!trajectoryEnabled&&trajectory.length===0)drawTrajectory();});
+document.getElementById("clear-trajectory").addEventListener("click",()=>{trajectory=[];document.getElementById("trajectory-empty").textContent=trajectoryEnabled?"等待位置数据…":"轨迹显示未启动";drawTrajectory();});window.addEventListener("resize",()=>{if(trajectoryEnabled||trajectory.length)drawTrajectory();});
+refreshServices();setInterval(refreshServices,5000);refreshRobotStatus();setInterval(refreshRobotStatus,500);refreshAI();setInterval(refreshAI,200);drawTrajectory();

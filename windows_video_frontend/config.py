@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 
 def _integer(name: str, default: int) -> int:
@@ -22,6 +23,10 @@ MEDIAMTX_HOST = os.getenv("MEDIAMTX_HOST", "")
 MEDIAMTX_WEBRTC_PORT = _integer("MEDIAMTX_WEBRTC_PORT", 8889)
 MEDIAMTX_PATH = os.getenv("MEDIAMTX_PATH", "robot")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+ROBOT_YOLO_PYTHON = Path(
+    os.getenv("ROBOT_YOLO_PYTHON", r"D:\anacanda\envs\robot-yolo\python.exe")
+).expanduser().resolve()
+AI_PORT = _integer("AI_PORT", 8091)
 PI_SSH_TARGET = os.getenv("PI_SSH_TARGET", "sws3009b2@100.96.200.113")
 SSH_CONNECT_TIMEOUT_SECONDS = _integer("SSH_CONNECT_TIMEOUT_SECONDS", 5)
 TELEMETRY_LISTEN_HOST = os.getenv("TELEMETRY_LISTEN_HOST", "0.0.0.0")

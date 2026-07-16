@@ -11,6 +11,7 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, render_template, request
 
 from . import config
+from .ai_manager import ai_manager
 from .service_manager import PAIRS, manager
 from .telemetry import TelemetryReceiver
 from windows_controller.config import RASPBERRY_PI_IP, RASPBERRY_PI_PORT
@@ -77,7 +78,9 @@ def status() -> Response:
 
 @app.get("/api/services")
 def services() -> Response:
-    return jsonify({name: manager.status(name) for name in PAIRS})
+    statuses = {name: manager.status(name) for name in PAIRS}
+    statuses["ai"] = ai_manager.status()
+    return jsonify(statuses)
 
 
 @app.get("/api/robot-status")
@@ -109,7 +112,7 @@ def motion_command() -> tuple[Response, int] | Response:
 def start_service(name: str) -> tuple[Response, int] | Response:
     try:
         require_local_json()
-        return jsonify(manager.start(name))
+        return jsonify(ai_manager.start() if name == "ai" else manager.start(name))
     except (OSError, PermissionError, RuntimeError, ValueError) as error:
         LOGGER.error("Could not start %s: %s", name, error)
         return jsonify(error=str(error)), 503
@@ -119,7 +122,7 @@ def start_service(name: str) -> tuple[Response, int] | Response:
 def stop_service(name: str) -> tuple[Response, int] | Response:
     try:
         require_local_json()
-        return jsonify(manager.stop(name))
+        return jsonify(ai_manager.stop() if name == "ai" else manager.stop(name))
     except (OSError, PermissionError, RuntimeError, ValueError) as error:
         LOGGER.error("Could not stop %s: %s", name, error)
         return jsonify(error=str(error)), 503
