@@ -29,7 +29,7 @@ MODEL_PATH = Path(
 WHEP_URL = os.getenv("AI_WHEP_URL", "http://127.0.0.1:8889/robot/whep")
 AI_HOST = os.getenv("AI_HOST", "127.0.0.1")
 AI_PORT = _integer("AI_PORT", 8091)
-CONFIDENCE = _float("AI_CONFIDENCE", 0.45, 0.0, 1.0)
+CONFIDENCE = _float("AI_CONFIDENCE", 0.60, 0.0, 1.0)
 IOU = _float("AI_IOU", 0.70, 0.0, 1.0)
 IMAGE_SIZE = _integer("AI_IMAGE_SIZE", 640, maximum=4096)
 MAX_FPS = _float("AI_MAX_FPS", 10.0, 0.1, 120.0)

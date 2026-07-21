@@ -8,7 +8,6 @@ import config
 from drive_mixer import apply_minimum_wheel_speed, mix_drive, scale_wheel_speeds
 from estop_gpio import EstopGPIO
 from input_filter import InputFilter
-from obstacle_avoidance import ObstacleAvoidance, parse_ultrasonic_distance
 from serial_sender import SerialSender
 from telemetry_sender import TelemetrySender
 from udp_receiver import UDPReceiver
@@ -22,16 +21,6 @@ def main() -> None:
     )
     estop_gpio: EstopGPIO | None = None
     input_filter = InputFilter(config.FILTER_ALPHA, config.INPUT_DEADZONE)
-    avoidance = ObstacleAvoidance(
-        slow_distance_cm=config.AVOIDANCE_SLOW_DISTANCE_CM,
-        stop_distance_cm=config.AVOIDANCE_STOP_DISTANCE_CM,
-        fast_chunk_cm=config.AVOIDANCE_FAST_CHUNK_CM,
-        slow_chunk_cm=config.AVOIDANCE_SLOW_CHUNK_CM,
-        bypass_distance_cm=config.AVOIDANCE_BYPASS_DISTANCE_CM,
-        turn_speed_level=config.AVOIDANCE_TURN_SPEED_LEVEL,
-        bypass_speed_level=config.AVOIDANCE_BYPASS_SPEED_LEVEL,
-        sensor_settle_seconds=config.AVOIDANCE_SENSOR_SETTLE_SECONDS,
-    )
     interval = 1.0 / config.CONTROL_RATE_HZ
     timed_out = True
     estop_latched = False
@@ -64,21 +53,9 @@ def main() -> None:
                 if response.startswith("STATE,"):
                     telemetry.publish_state(response)
                     print(f"[ARDUINO] {response}")
-                    obstacle_distance = parse_ultrasonic_distance(response)
-                    if avoidance.observe_distance(obstacle_distance, now):
-                        sender.send_raw(config.SERIAL_IDLE_COMMAND)
-                        motion_active = False
-                        motion_acknowledged = False
-                        avoidance.interrupted_for_obstacle()
-                        print(
-                            "Avoidance: obstacle entered slow zone; "
-                            "current forward segment stopped."
-                        )
                 elif response in ("DONE,MOVE", "DONE,TURN"):
                     motion_active = False
                     motion_acknowledged = False
-                    if avoidance.active:
-                        avoidance.action_done(now)
                     print(f"Arduino action completed: {response}")
                 elif response.startswith("ACK,"):
                     motion_acknowledged = True
@@ -86,9 +63,6 @@ def main() -> None:
                 elif response.startswith("ERROR,"):
                     motion_active = False
                     motion_acknowledged = False
-                    if avoidance.active:
-                        sender.send_raw(config.SERIAL_AVOIDANCE_OFF_COMMAND)
-                        avoidance.reset()
                     if response == "ERROR,ESTOP_ACTIVE":
                         estop_latched = True
                     print(f"Arduino rejected command: {response}")
@@ -113,9 +87,6 @@ def main() -> None:
                     last_left, last_right = 0, 0
                     motion_active = False
                     motion_acknowledged = False
-                    if avoidance.active:
-                        sender.send_raw(config.SERIAL_AVOIDANCE_OFF_COMMAND)
-                        avoidance.reset()
                     print("E-STOP latched: motion forwarding disabled.")
                 elif safety_command == "RESET":
                     estop_gpio.reset()
@@ -124,9 +95,6 @@ def main() -> None:
                     input_filter.reset()
                     motion_active = False
                     motion_acknowledged = False
-                    if avoidance.active:
-                        sender.send_raw(config.SERIAL_AVOIDANCE_OFF_COMMAND)
-                        avoidance.reset()
                     print("E-STOP reset: motion forwarding enabled.")
                 elif safety_command == "IDLE":
                     sender.send_raw(config.SERIAL_IDLE_COMMAND)
@@ -134,9 +102,6 @@ def main() -> None:
                     last_left, last_right = 0, 0
                     motion_active = False
                     motion_acknowledged = False
-                    if avoidance.active:
-                        sender.send_raw(config.SERIAL_AVOIDANCE_OFF_COMMAND)
-                        avoidance.reset()
                     timed_out = True
                     print("Keyboard mode waiting: Arduino set to IDLE.")
 
@@ -147,15 +112,8 @@ def main() -> None:
             )
             if actions and not estop_latched and not safety_blocks_action:
                 move = actions[0]
-                if motion_active or avoidance.active:
+                if motion_active:
                     print("Action rejected locally: BUSY")
-                elif hasattr(move, "distance_cm") and move.direction == "FWD":
-                    avoidance.start(move.distance_cm, move.speed_level, now)
-                    sender.send_raw(config.SERIAL_AVOIDANCE_ON_COMMAND)
-                    print(
-                        "Avoidance started: "
-                        f"forward goal={move.distance_cm:.1f} cm"
-                    )
                 elif hasattr(move, "distance_cm"):
                     sender.send_raw(config.SERIAL_MOVE_COMMAND_FORMAT.format(
                         direction="REV" if move.direction == "BWD" else move.direction,
@@ -166,39 +124,12 @@ def main() -> None:
                         direction=move.direction, speed_level=move.speed_level,
                         angle_deg=move.angle_deg))
                     print(f"Motion sent: TURN,{move.direction},{move.speed_level},{move.angle_deg:.1f}")
-                if not motion_active and not avoidance.active:
+                if not motion_active:
                     motion_active = True
                     motion_started_at = move.received_at
                     motion_acknowledged = False
                     motion_ack_deadline = now + config.MOVE_ACK_TIMEOUT_SECONDS
                     input_filter.reset()
-
-            planned = avoidance.next_action(now)
-            if planned is not None and not motion_active and not estop_latched:
-                if planned.command == "MOVE":
-                    sender.send_raw(config.SERIAL_MOVE_COMMAND_FORMAT.format(
-                        direction=planned.direction,
-                        speed_level=planned.speed_level,
-                        distance_cm=planned.value,
-                    ))
-                else:
-                    sender.send_raw(config.SERIAL_TURN_COMMAND_FORMAT.format(
-                        direction=planned.direction,
-                        speed_level=planned.speed_level,
-                        angle_deg=planned.value,
-                    ))
-                motion_active = True
-                motion_started_at = now
-                motion_acknowledged = False
-                motion_ack_deadline = now + config.MOVE_ACK_TIMEOUT_SECONDS
-                print(
-                    f"Avoidance action: {planned.command},{planned.direction},"
-                    f"{planned.speed_level},{planned.value:.1f}"
-                )
-            elif avoidance.phase == "DONE":
-                sender.send_raw(config.SERIAL_AVOIDANCE_OFF_COMMAND)
-                avoidance.reset()
-                print("Avoidance completed: requested forward distance reached.")
 
             command = receiver.latest()
             if (
@@ -208,9 +139,6 @@ def main() -> None:
             ):
                 motion_active = False
                 motion_acknowledged = False
-                if avoidance.active:
-                    sender.send_raw(config.SERIAL_AVOIDANCE_OFF_COMMAND)
-                    avoidance.reset()
                 print("Distance move cancelled by manual control.")
             if (
                 motion_active
@@ -219,9 +147,6 @@ def main() -> None:
             ):
                 motion_active = False
                 sender.send(0, 0)
-                if avoidance.active:
-                    sender.send_raw(config.SERIAL_AVOIDANCE_OFF_COMMAND)
-                    avoidance.reset()
                 print("Distance move cancelled: Arduino ACK timeout.")
             stale = command is None or now - command.received_at > config.CONTROL_TIMEOUT_SECONDS
 

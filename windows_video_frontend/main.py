@@ -8,10 +8,11 @@ import socket
 import time
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, send_file
 
 from . import config
 from .ai_manager import ai_manager
+from .photo_cache import photo_cache
 from .service_manager import PAIRS, manager
 from .telemetry import TelemetryReceiver
 from windows_controller.config import RASPBERRY_PI_IP, RASPBERRY_PI_PORT
@@ -90,6 +91,32 @@ def robot_status() -> Response:
     )
 
 
+@app.get("/api/photos")
+def photos() -> Response:
+    return jsonify(photos=photo_cache.list())
+
+
+@app.post("/api/photos")
+def cache_photo() -> tuple[Response, int] | Response:
+    upload = request.files.get("photo")
+    if upload is None:
+        return jsonify(error="A photo file is required"), 400
+    try:
+        entry = photo_cache.add(upload.stream, upload.filename or "cat")
+        return jsonify(photo=entry, photos=photo_cache.list())
+    except (OSError, ValueError) as error:
+        return jsonify(error=str(error)), 400
+
+
+@app.get("/api/photos/<photo_id>/preview")
+def preview_photo(photo_id: str) -> tuple[Response, int] | Response:
+    try:
+        path = photo_cache.path_for(photo_id)
+    except KeyError:
+        return jsonify(error="Photo not found"), 404
+    return send_file(path, mimetype="image/jpeg", conditional=True)
+
+
 @app.post("/api/motion-command")
 def motion_command() -> tuple[Response, int] | Response:
     try:
@@ -147,10 +174,17 @@ def main() -> None:
     )
     telemetry.start()
     LOGGER.info("Web viewer: http://%s:%d", config.WEB_HOST, config.WEB_PORT)
-    app.run(
-        host=config.WEB_HOST, port=config.WEB_PORT,
-        threaded=True, use_reloader=False,
-    )
+    try:
+        app.run(
+            host=config.WEB_HOST, port=config.WEB_PORT,
+            threaded=True, use_reloader=False,
+        )
+    finally:
+        try:
+            ai_manager.stop()
+        except (OSError, RuntimeError):
+            LOGGER.exception("Could not stop the AI service during frontend shutdown")
+        photo_cache.close()
 
 
 if __name__ == "__main__":

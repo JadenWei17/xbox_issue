@@ -19,6 +19,7 @@ RUN_DIR = PROJECT_ROOT / ".run"
 LOG_DIR = PROJECT_ROOT / "runtime_logs"
 PID_FILE = RUN_DIR / "windows-ai.pid"
 STATUS_URL = f"http://127.0.0.1:{config.AI_PORT}/api/status"
+SHUTDOWN_URL = f"http://127.0.0.1:{config.AI_PORT}/api/shutdown"
 
 
 class AIManager:
@@ -51,11 +52,21 @@ class AIManager:
         except (OSError, ValueError, urllib.error.URLError):
             return None
 
+    @staticmethod
+    def _request_shutdown() -> bool:
+        try:
+            request = urllib.request.Request(SHUTDOWN_URL, data=b"", method="POST")
+            with urllib.request.urlopen(request, timeout=1.0) as response:
+                return response.status == 200
+        except (OSError, urllib.error.URLError):
+            return False
+
     def status(self) -> dict[str, object]:
         pid = self._read_pid()
-        running = self._pid_running(pid)
-        api = self._api_status() if running else None
-        if not running:
+        pid_running = self._pid_running(pid)
+        api = self._api_status()
+        running = pid_running or api is not None
+        if not pid_running:
             PID_FILE.unlink(missing_ok=True)
         return {
             "local": running,
@@ -69,7 +80,7 @@ class AIManager:
 
     def start(self) -> dict[str, object]:
         with self._lock:
-            if self._pid_running(self._read_pid()):
+            if self._pid_running(self._read_pid()) or self._api_status() is not None:
                 return self.status()
             if not config.ROBOT_YOLO_PYTHON.is_file():
                 raise RuntimeError(
@@ -115,6 +126,11 @@ class AIManager:
     def stop(self) -> dict[str, object]:
         with self._lock:
             pid = self._read_pid()
+            self._request_shutdown()
+            for _ in range(20):
+                if self._api_status() is None:
+                    break
+                time.sleep(0.1)
             if pid is not None and self._pid_running(pid):
                 if os.name == "nt":
                     result = subprocess.run(
@@ -123,7 +139,9 @@ class AIManager:
                         capture_output=True,
                         check=False,
                     )
-                    if result.returncode != 0 and self._pid_running(pid):
+                    # A graceful /api/shutdown can finish between the PID check
+                    # and taskkill. Treat that normal race as success.
+                    if result.returncode != 0 and self._api_status() is not None:
                         detail = result.stderr.strip() or result.stdout.strip()
                         raise RuntimeError(detail or "Could not stop the AI process")
                 else:

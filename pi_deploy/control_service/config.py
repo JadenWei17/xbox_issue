@@ -50,18 +50,3 @@ SERIAL_RESET_COMMAND = "RESET\n"
 SERIAL_IDLE_COMMAND = "IDLE\n"
 SERIAL_MOVE_COMMAND_FORMAT = "MOVE,{direction},{speed_level},{distance_cm:.1f}\n"
 SERIAL_TURN_COMMAND_FORMAT = "TURN,{direction},{speed_level},{angle_deg:.1f}\n"
-SERIAL_AVOIDANCE_ON_COMMAND = "AVOID,ON\n"
-SERIAL_AVOIDANCE_OFF_COMMAND = "AVOID,OFF\n"
-
-# Keyboard forward-distance obstacle avoidance. The front ultrasonic sensor is
-# not useful while reversing, so reverse commands retain their existing path.
-AVOIDANCE_SLOW_DISTANCE_CM = 50.0
-AVOIDANCE_STOP_DISTANCE_CM = 30.0
-# Arduino considers an error of 5 cm already complete, so a 5 cm MOVE would
-# finish without starting the motors. Keep avoidance segments above that limit.
-AVOIDANCE_FAST_CHUNK_CM = 10.0
-AVOIDANCE_SLOW_CHUNK_CM = 10.0
-AVOIDANCE_BYPASS_DISTANCE_CM = 50.0
-AVOIDANCE_TURN_SPEED_LEVEL = 1
-AVOIDANCE_BYPASS_SPEED_LEVEL = 1
-AVOIDANCE_SENSOR_SETTLE_SECONDS = 0.4

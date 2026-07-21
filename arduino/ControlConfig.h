@@ -26,11 +26,9 @@ const float TURN_KP = 3.0f;
 const float TURN_KI = 0.0f;
 const float TURN_KD = 0.2f;
 
-// E-STOP, ultrasonic, and active braking.
+// GPIO E-STOP, ultrasonic telemetry, and active braking.
 const unsigned long ESTOP_CONFIRM_MS = 10;
 const unsigned long ULTRASONIC_INTERVAL_MS = 50;
-const unsigned int EMERGENCY_DISTANCE_CM = 30;
-const uint8_t ULTRASONIC_CONFIRM_COUNT = 2;
 const unsigned long ULTRASONIC_TIMEOUT_US = 30000;
 const unsigned long ULTRASONIC_WARNING_INTERVAL_MS = 5000;
 const unsigned long ULTRASONIC_US_PER_CM = 58;
