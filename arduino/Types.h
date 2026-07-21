@@ -12,8 +12,7 @@ enum RobotState {
 
 enum EstopSource {
   ESTOP_SOURCE_NONE,
-  ESTOP_SOURCE_GPIO17,
-  ESTOP_SOURCE_ULTRASONIC
+  ESTOP_SOURCE_GPIO17
 };
 
 enum UltrasonicPhase {

@@ -10,7 +10,7 @@
 ```text
 xbox_issue/
 ├── pi_deploy/             # 整个目录的内容复制到 Raspberry Pi
-│   ├── control_service/   # UDP、滤波、避障、GPIO、Arduino 串口
+│   ├── control_service/   # UDP、滤波、GPIO 急停、Arduino 串口
 │   └── video_service/     # rpicam-vid、H.264、MPEG-TS/UDP
 ├── arduino/
 ├── windows_controller/

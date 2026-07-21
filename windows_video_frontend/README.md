@@ -74,6 +74,13 @@ python -m windows_video_frontend.main
 航向和位置。Windows 防火墙需要允许本机 UDP 5010 入站。手柄 D-pad 切换
 到 `DISTANCE_MODE` 后，页面会显示命令输入框，格式与终端一致：
 
+实时画面使用页面内 WebRTC 播放器。照片区直接从实时视频抓取当前帧，不依赖
+AI 服务；只有实时视频收到有效画面后“拍照”按钮才会启用。照片以拍摄时间命名
+并保存为 JPG，自动写入当前 Windows 用户桌面的 `RobotPhotos` 文件夹，同时
+可从网页列表下载。刷新网页、停止前端 Python 或重启电脑都不会删除照片；再次
+启动前端时会重新读取文件夹中的 JPG。可通过 `ROBOT_PHOTO_DIR` 环境变量修改
+保存目录。
+
 ```text
 w 2 50
 s 1 20

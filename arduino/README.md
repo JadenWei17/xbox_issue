@@ -14,7 +14,7 @@ Select Arduino Mega 2560 and the serial port, then verify and upload.
 | `MotorControl.ino` | Motor Shield output and encoder interrupts |
 | `Navigation.ino` | MPU6500 sampling and robot pose estimation |
 | `MotionControl.ino` | PID, distance moves, turns, and wheel synchronization |
-| `Safety.ino` | E-STOP, active braking, and ultrasonic state machine |
+| `Safety.ino` | GPIO E-STOP, active braking, and ultrasonic telemetry |
 | `CommandProtocol.ino` | Strict serial parsing and command dispatch |
 | `Telemetry.ino` | Non-blocking status and completion messages |
 | `HardwareConfig.h` | Pins, shield bit mapping, and motor reversal |
@@ -57,32 +57,19 @@ The input must remain LOW for 10 ms before the latch is accepted, filtering
 short motor-start EMI spikes without adding blocking delays. RESET is rejected
 while D18 is still LOW.
 
-## Local ultrasonic E-STOP
+## Ultrasonic telemetry
 
 An HC-SR04 at the front of the robot is sampled by a non-blocking `micros()`
 state machine every 50 ms. It does not use `delay()`, `pulseIn()`, or an ISR.
-The ultrasonic E-STOP is armed only when the robot has positive forward motion:
-MANUAL left/right speed sum greater than zero, or a forward DISTANCE_MOVE.
-Stationary, reverse, and in-place turns do not accumulate obstacle confirmations.
+Distance is reported in the regular `STATE` telemetry as `US=<cm>`; no echo,
+timeout, and zero-distance results are reported as unavailable. Measurements
+are display-only and do not stop, slow, or redirect the robot.
 
-Two consecutive valid readings below 30 cm enter the existing ESTOP state,
-stop all four motors locally, cancel any distance task, and report:
-
-```text
-ESTOP source=ULTRASONIC distance_cm=12
-```
-
-Both GPIO17 and ultrasonic E-STOP use 200 ms of non-blocking L293D dynamic
-braking before releasing the motors. During braking, both direction inputs are
-LOW and each motor Enable/PWM is 255. Ordinary zero-speed commands and normal
-distance completion continue to coast, avoiding continuous brake current.
-`ACTIVE_BRAKE_PWM` and `ACTIVE_BRAKE_DURATION_MS` are centralized constants.
-
-No echo, timeout, and zero-distance results are invalid rather than obstacles.
-Warnings are limited to once per 5 seconds. GPIO17 and ultrasonic requests
-share the same motor-stop and ESTOP state-transition function. X/RESET can
-clear an ultrasonic E-STOP immediately; only a physically LOW D18 GPIO17
-signal blocks reset.
+Only the GPIO17/D18 E-STOP path starts the 200 ms non-blocking L293D dynamic
+brake. During braking, both direction inputs are LOW and each motor Enable/PWM
+is 255. Ordinary zero-speed commands, watchdog stops, and normal distance
+completion continue to coast. `ACTIVE_BRAKE_PWM` and
+`ACTIVE_BRAKE_DURATION_MS` remain centralized constants.
 
 ## Distance moves and encoders
 

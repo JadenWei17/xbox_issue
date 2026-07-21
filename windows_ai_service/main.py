@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import logging
+import os
+import threading
+import time
 
-from flask import Flask, Response, jsonify
+from flask import Flask, Response, jsonify, request
 
 from . import config
 from .inference import worker
@@ -37,6 +40,23 @@ def status() -> Response:
 @app.get("/api/detections")
 def detections() -> Response:
     return jsonify(state.snapshot())
+
+
+def _exit_after_response() -> None:
+    """Let Flask return the acknowledgement before ending this process."""
+    time.sleep(0.2)
+    os._exit(0)
+
+
+@app.post("/api/shutdown")
+def shutdown() -> tuple[Response, int] | Response:
+    # This service is intended to be local-only. Keep the destructive endpoint
+    # unavailable if AI_HOST is ever changed to expose the API on the network.
+    if request.remote_addr not in {"127.0.0.1", "::1"}:
+        return jsonify(error="shutdown is only available locally"), 403
+    worker.stop()
+    threading.Thread(target=_exit_after_response, daemon=True).start()
+    return jsonify(stopping=True)
 
 
 def main() -> None:

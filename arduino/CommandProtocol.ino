@@ -128,7 +128,6 @@ bool applyCommand(const char *command) {
     stopAllMotors();
     estopLatched = false;
     estopSource = ESTOP_SOURCE_NONE;
-    piAvoidanceMode = false;
     robotState = IDLE;
     lastLeftSpeed = 0;
     lastRightSpeed = 0;
@@ -156,15 +155,6 @@ bool applyCommand(const char *command) {
 
   if (estopLatched || estopInterruptRequested) {
     return false;
-  }
-
-  if (strcmp(command, "AVOID,ON") == 0) {
-    piAvoidanceMode = true;
-    return true;
-  }
-  if (strcmp(command, "AVOID,OFF") == 0) {
-    piAvoidanceMode = false;
-    return true;
   }
 
   if (strncmp(command,"MOVE,",5)==0 || strncmp(command,"TURN,",5)==0) {
@@ -215,11 +205,6 @@ bool applyCommand(const char *command) {
   if (!parseMotorSpeed(cursor, rightSpeed) || *cursor != '\0') {
     return false;
   }
-
-  // Any manual Xbox command leaves keyboard avoidance mode. This prevents a
-  // lost Pi process from accidentally disabling the original manual-mode
-  // ultrasonic E-STOP on a later driving session.
-  piAvoidanceMode = false;
 
   setDriveSpeeds(leftSpeed, rightSpeed);
   lastLeftSpeed = leftSpeed;

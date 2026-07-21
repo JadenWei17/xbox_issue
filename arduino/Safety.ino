@@ -25,15 +25,7 @@ void updateActiveBrake() {
 }
 
 
-bool isMovingForward() {
-  if (robotState == MANUAL) {
-    return (long)lastLeftSpeed + (long)lastRightSpeed > 0;
-  }
-  return robotState == DISTANCE_MOVE && distanceCruiseSpeed > 0;
-}
-
-
-void requestEstop(EstopSource source, unsigned int distanceCm) {
+void requestEstop(EstopSource source) {
   if (estopLatched) {
     return;
   }
@@ -47,10 +39,7 @@ void requestEstop(EstopSource source, unsigned int distanceCm) {
   donePending = false;
   distanceBoostActive = false;
 
-  if (source == ESTOP_SOURCE_ULTRASONIC) {
-    Serial.print("ESTOP source=ULTRASONIC distance_cm=");
-    Serial.println(distanceCm);
-  } else if (source == ESTOP_SOURCE_GPIO17) {
+  if (source == ESTOP_SOURCE_GPIO17) {
     Serial.println("ESTOP source=GPIO17");
   }
 }
@@ -58,7 +47,6 @@ void requestEstop(EstopSource source, unsigned int distanceCm) {
 
 void recordInvalidUltrasonicMeasurement() {
   ultrasonicHasValidDistance = false;
-  ultrasonicTooCloseCount = 0;
   ++ultrasonicFailureCount;
   unsigned long now = millis();
   if (now - lastUltrasonicWarningMs >= ULTRASONIC_WARNING_INTERVAL_MS) {
@@ -80,21 +68,6 @@ void recordValidUltrasonicMeasurement(unsigned long echoDurationUs) {
   latestUltrasonicDistanceCm = distanceCm;
   ultrasonicHasValidDistance = true;
   ultrasonicFailureCount = 0;
-
-  if (!isMovingForward() || piAvoidanceMode) {
-    ultrasonicTooCloseCount = 0;
-    return;
-  }
-  if (distanceCm < EMERGENCY_DISTANCE_CM) {
-    if (ultrasonicTooCloseCount < ULTRASONIC_CONFIRM_COUNT) {
-      ++ultrasonicTooCloseCount;
-    }
-    if (ultrasonicTooCloseCount >= ULTRASONIC_CONFIRM_COUNT) {
-      requestEstop(ESTOP_SOURCE_ULTRASONIC, distanceCm);
-    }
-  } else {
-    ultrasonicTooCloseCount = 0;
-  }
 }
 
 

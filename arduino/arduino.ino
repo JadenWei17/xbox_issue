@@ -45,8 +45,6 @@ unsigned long ultrasonicPhaseStartedUs = 0;
 unsigned long ultrasonicEchoRiseUs = 0;
 unsigned int latestUltrasonicDistanceCm = 0;
 bool ultrasonicHasValidDistance = false;
-bool piAvoidanceMode = false;
-uint8_t ultrasonicTooCloseCount = 0;
 unsigned long ultrasonicFailureCount = 0;
 unsigned long lastUltrasonicWarningMs = 0;
 bool activeBrakeEngaged = false;
@@ -119,7 +117,7 @@ void loop() {
     estopInterruptRequested = false;
     interrupts();
     if (confirmed) {
-      requestEstop(ESTOP_SOURCE_GPIO17, 0);
+      requestEstop(ESTOP_SOURCE_GPIO17);
     }
   }
 

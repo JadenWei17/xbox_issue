@@ -26,6 +26,7 @@ def main() -> None:
     mode = ControlMode.MANUAL
     keyboard = KeyboardInput()
     next_status_write = 0.0
+    next_control_log = 0.0
 
     try:
         controller.connect()
@@ -87,7 +88,9 @@ def main() -> None:
             if mode is ControlMode.MANUAL and not mode_changed:
                 data = state.as_dict()
                 client.send(data)
-                print(data, flush=True)
+                if now >= next_control_log:
+                    print(data, flush=True)
+                    next_control_log = now + 1.0
 
             next_send_time += SEND_INTERVAL_SECONDS
             delay = next_send_time - time.monotonic()
